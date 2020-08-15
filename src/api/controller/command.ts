@@ -10,11 +10,16 @@ import { Response } from 'express';
 import * as AuthController from '../controller/auth';
 import * as TweetController from '../controller/tweet';
 import * as FollowerController from '../controller/follower';
+import * as LikeController from '../controller/like';
+import * as CommentController from '../controller/comment';
 import * as response from '../../network/response';
 import { Payload } from '../util/service/secureAuth';
 
-const validateParams = (params: string[], neededParams: string[]) => {
+const validateParams = (params: string[], neededParams: string[], optionalParameters?: number) => {
     if (params.length > neededParams.length) {
+        if (optionalParameters && (params.length - optionalParameters === neededParams.length)) {
+            return null;
+        }
         const extraParams = params.reduce(
             (previousValue, currentValue, currentIndex): string => {
                 console.log(currentIndex);
@@ -95,18 +100,12 @@ const addTweetCommand = async (payload: Payload, params: string[]) => {
 };
 
 const viewTweetsCommand = async (payload: Payload, params: string[]) => {
-    const paramsNotValid = validateParams(params, ['tweetId']);
+    const paramsNotValid = validateParams(params, ['email']);
 
     if (!paramsNotValid || params.length <= 1) {
-        let [tweetId] = params;
+        let [email] = params;
 
-        if (tweetId) {
-            return (await TweetController.listTweets(
-                payload,
-                tweetId
-            )) as TweetInterface;
-        }
-        return (await TweetController.listTweets(payload)) as TweetInterface[];
+        return await TweetController.listTweets(payload, email);
     }
 
     throw paramsNotValid;
@@ -170,6 +169,53 @@ const unfollowCommand = async (payload: Payload, params: string[]) => {
         )) as FollowerInterface;
     }
 
+    throw paramsNotValid;
+};
+
+const likeCommand = async (payload: Payload, params: string[]) => {
+    const paramsNotValid = validateParams(params, ['tweetId']);
+
+    if (!paramsNotValid) {
+        let [tweetId] = params;
+
+        return await LikeController.addLike(payload, { relatedTo: tweetId });
+    }
+    throw paramsNotValid;
+};
+
+const dislikeCommand = async (payload: Payload, params: string[]) => {
+    const paramsNotValid = validateParams(params, ['tweetId']);
+
+    if (!paramsNotValid) {
+        let [tweetId] = params;
+
+        return await LikeController.deleteLike(payload, tweetId);
+    }
+    throw paramsNotValid;
+};
+
+const replyCommand = async (payload: Payload, params: string[]) => {
+    const paramsNotValid = validateParams(params, ['tweetId', 'content']);
+
+    if (!paramsNotValid) {
+        let [tweetId, content] = params;
+
+        return await CommentController.addComment(payload, {
+            relatedTo: tweetId,
+            content,
+        });
+    }
+    throw paramsNotValid;
+};
+
+const retweetCommand = async (payload: Payload, params: string[]) => {
+    const paramsNotValid = validateParams(params, ['tweetId'], 1);
+
+    if (!paramsNotValid) {
+        let [tweetId, content] = params;
+
+        return await TweetController.addTweet(payload, { content, relatedTo: tweetId }, true);
+    }
     throw paramsNotValid;
 };
 
@@ -272,6 +318,51 @@ export const commandController = async (req: RequestCommand, res: Response) => {
                     code: 200,
                     data: unfollow,
                     message: `You succesfuly unfollow the user`,
+                });
+                break;
+
+            case 'LIKE_TWEET':
+                const like = await likeCommand(req.payload, req.commandParams);
+                response.success(res, {
+                    code: 200,
+                    data: like,
+                    message: 'Successfuly like do',
+                });
+                break;
+
+            case 'DISLIKE_TWEET':
+                const dislike = await dislikeCommand(
+                    req.payload,
+                    req.commandParams
+                );
+                response.success(res, {
+                    code: 200,
+                    data: dislike,
+                    message: 'Successfuly like removed',
+                });
+                break;
+
+            case 'REPLY_TWEET':
+                const reply = await replyCommand(
+                    req.payload,
+                    req.commandParams
+                );
+                response.success(res, {
+                    code: 200,
+                    data: reply,
+                    message: 'Successfuly like removed',
+                });
+                break;
+
+            case 'RETWEET':
+                const retweet = await retweetCommand(
+                    req.payload,
+                    req.commandParams
+                );
+                response.success(res, {
+                    code: 200,
+                    data: retweet,
+                    message: 'Successfully retweet',
                 });
                 break;
 
